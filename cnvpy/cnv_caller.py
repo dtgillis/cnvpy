@@ -8,17 +8,18 @@ import os
 
 
 def print_help():
-    pass
+    print """ here comes some help"""
 
 
 def depth_using_sam_tools():
     interval_list = None
     out_dir = None
     bam_file_list = None
+    window_size = None
 
     argv = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(argv, "hi:b:o:", ["interval_list=", "bam_file_list=", "out_dir="])
+        opts, args = getopt.getopt(argv, "hi:b:o:w:", ["interval_list=", "bam_file_list=", "out_dir=", "window_size="])
     except getopt.GetoptError:
         print 'cnv_caller.py -b <bamfilelist> -i <interval_list> -o <outputdir>'
         sys.exit(2)
@@ -27,32 +28,38 @@ def depth_using_sam_tools():
 
         if opt in ("-h", "--help"):
             print_help()
+            sys.exit()
         elif opt in ("-i", "--interval_list"):
             interval_list = arg
         elif opt in ("-o", "--out_dir"):
             out_dir = arg
         elif opt in ("-b", "--bam_file_list"):
             bam_file_list = arg
+        elif opt in ("-w", "--window_size"):
+            window_size = int(arg)
         else:
             assert False, "invalid option"
 
     assert interval_list is not None , "Specify interval list -i <interval_list>"
     assert out_dir is not None, "Specifiy output directory -o <out_dir>"
     assert bam_file_list is not None, "Specify bam file list -b <bam_file_list>"
+    assert window_size is not None, "Specify a starting window size -w <window_size>"
 
     main_out_file_prefix = out_dir + os.sep + 'cnv_calls.'
 
-    depth_parser = SamToolsDepthParser(bam_file_list, interval_list)
-    depth_parser.get_interval_stats_by_sample()
+    depth_parser = SamToolsDepthParser(bam_file_list, interval_list, out_dir, window_size)
+
     for chrm in depth_parser.depth_data.interval_list.interval_dictionary:
 
+        sys.stdout.write("Starting cnv_caller for " + chrm + os.linesep)
+        depth_parser.get_interval_stats_by_sample(chrm)
         depth_parser.get_windows_in_intervals_by_chrm(chrm)
         sample_prob = doc_math.calculate_poisson_window_prob_for_chrm(
             depth_parser.depth_data.interval_list.interval_dictionary[chrm])
-        out_file_pointer = open(main_out_file_prefix  + chrm + '.out', 'w')
+        out_file_pointer = open(main_out_file_prefix + chrm + '.' + str(window_size) + '.chrm.out', 'w')
 
         #header stuff
-
+        sys.stdout.write("Writing cnv calls for " + chrm + " to file " + out_file_pointer.name + os.linesep)
         out_file_pointer.write('sample_name,chrm,start,end,state' + os.linesep)
         for sample in sample_prob:
             for cnv_call in sample_prob[sample]:

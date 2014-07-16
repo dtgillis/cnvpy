@@ -12,11 +12,18 @@ def simple_bays_calc(sample_prob_matrix_dict, intervals):
 
     for sample in sample_prob_matrix_dict:
 
+        #TODO this should be a try catch type deal
         p_c = sample_prob_matrix_dict[sample].mean(axis=0)
 
-        p_y = np.dot(p_c , sample_prob_matrix_dict[sample].T)
+        p_c = np.nan_to_num(p_c)
+
+        p_y = np.dot(p_c, sample_prob_matrix_dict[sample].T)
+
+        p_y = np.nan_to_num(p_y)
 
         num = np.multiply(p_c, sample_prob_matrix_dict[sample])
+
+        num = np.nan_to_num(num)
 
         out_probs[sample] = np.divide(num.T, p_y).T
 
@@ -55,7 +62,7 @@ def get_chrm_depth_avg_by_sample(chrm_interval_list):
 
 
 def calculate_window_stats(chrm_interval_list, chrm_means, average_depth_by_sample):
-    sys.stdout.write("Calculationg stats for " + str(len(chrm_interval_list)) + " intervals.\n")
+    sys.stdout.write("Calculating window level stats for " + str(len(chrm_interval_list)) + " intervals")
     copy_number = np.array([10**-8, 1, 2, 3, 4, 5, 6])
     interval_num = 0
     for interval in chrm_interval_list:
@@ -73,9 +80,10 @@ def calculate_window_stats(chrm_interval_list, chrm_means, average_depth_by_samp
         for window in interval.windows:
             window_means = np.mean(window.window_depth_data, axis=1)
             for sample in average_depth_by_sample:
-                interval_depth = interval.stats[sample]['total_reads'] * 100 / float((interval.interval_end-interval.interval_start))
+                #interval_depth = interval.stats[sample]['total_reads'] * 100 / float(
+                #    (interval.interval_end-interval.interval_start))
                 target_eff_consant = \
-                    (interval_depth * np.sum(window_means)) / (2.0 * np.sum(interval_means))
+                    (average_depth_by_sample[sample] * np.sum(window_means)) / (2.0 * np.sum(chrm_means))
                 tmp_depth = int(np.array(window.window_depth_by_sample[sample])[:, 1].mean())
                 tar_efficiency = copy_number * target_eff_consant
 
@@ -90,6 +98,10 @@ def calculate_window_stats(chrm_interval_list, chrm_means, average_depth_by_samp
                 window.stats[sample] = np.array(window.stats[sample])
                 window.stats[sample] /= window.stats[sample].sum()
         interval_num += 1
+
+    sys.stdout.write("\nFinished windows stats.\n\n")
+    sys.stdout.write("---------------------------------------\n")
+
 
 def make_cnv_monte_carlo_call(prob_obj):
 

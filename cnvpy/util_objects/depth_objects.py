@@ -15,12 +15,12 @@ class Window():
 
 class Interval():
 
-    def __init__(self):
+    def __init__(self, window_size):
 
         self.chrm = None
         self.interval_start = None
         self.interval_end = None
-        self.windows_size = 100
+        self.windows_size = window_size
         self.windows = []
         self.stats = dict()
         self.done = False
@@ -85,11 +85,11 @@ from cnvpy.samtools_utils.io import SamFileDictionary
 from cnvpy.depth_coverage.depth_parsers import IntervalParser
 
 class DepthData():
-    def __init__(self, bam_file_list, interval_list, binary=True):
+    def __init__(self, bam_file_list, interval_list, window_size, binary=True):
 
         self.bam_files = SamFileDictionary(bam_file_list, binary=binary, open_files=True)
         self.interval_list = IntervalParser(interval_list)
-        self.interval_list.build_interval_dictionary()
+        self.interval_list.build_interval_dictionary(window_size)
 
 
 

@@ -14,13 +14,13 @@ class IntervalParser():
         self.interval_file = interval_file
         self.interval_dictionary = dict()
 
-    def build_interval_dictionary(self):
+    def build_interval_dictionary(self, window_size):
 
         from cnvpy.util_objects.depth_objects import Interval
 
         for line in open(self.interval_file, 'r'):
 
-            interval = Interval()
+            interval = Interval(window_size)
 
             interval.chrm = line.split(':')[0]
             interval.interval_start = int(line.split(':')[1].split('-')[0])
@@ -49,9 +49,9 @@ from cnvpy.util_objects.depth_objects import Window
 
 class SamToolsDepthParser():
 
-    def __init__(self, bam_list_file, interval_file):
-        self.depth_data = DepthData(bam_list_file, interval_file)
-
+    def __init__(self, bam_list_file, interval_file, output_dir, window_size):
+        self.depth_data = DepthData(bam_list_file, interval_file, window_size)
+        self.output_dir = output_dir
         # add the stats dict for each sample we are looking at
         for chrm in self.depth_data.interval_list.interval_dictionary:
             for sample in self.depth_data.bam_files.sam_file_dict:
@@ -59,51 +59,55 @@ class SamToolsDepthParser():
                 for interval in chrm_interval_list:
                     interval.stats[sample] = dict()
 
-    def get_interval_stats_by_sample(self, write_stats=False):
+    def get_interval_stats_by_sample(self, chrm, write_stats=False):
 
         sample_list = self.depth_data.bam_files.sam_file_dict.keys()
 
-        for chrm in self.depth_data.interval_list.interval_dictionary:
+        chrm_interval_list = self.depth_data.interval_list.interval_dictionary[chrm]
+        interval_num = 0
+        sys.stdout.write(
+            "Creating interval stats for %s intervals" % len(chrm_interval_list))
+        for interval in chrm_interval_list:
+            if interval_num % 100 == 0:
+                sys.stdout.write(".")
+            if interval_num % 1000 == 0:
+                sys.stdout.write("\n")
 
-            chrm_interval_list = self.depth_data.interval_list.interval_dictionary[chrm]
+            for sample in sample_list:
+
+                samfp = self.depth_data.bam_files.sam_file_dict[sample]
+
+                self.get_interval_read_stats(samfp, interval, sample)
+            interval_num += 1
+
+        sys.stdout.write("\n Finished getting interval level stats\n\n")
+        sys.stdout.write("\n------------------------------------------\n")
+        if write_stats:
+
+            for sample in sample_list:
+                stats_out = open(self.output_dir + os.sep + sample + '.' + chrm + '.interval_stats.dat', 'w')
+                stats_out.write('Int_size,reads,avg_insert,unpaired_percent,gc_content' + os.linesep)
+                for interval in chrm_interval_list:
+                    stats = interval.stats[sample]
+                    stats_out.write(str(interval.interval_end-interval.interval_start))
+                    for stat in ['total_reads', 'avg_insert_size', 'unpaired_percent', 'gc_content']:
+                        stats_out.write(",%s" % stats[stat])
+                    stats_out.write(os.linesep)
+                stats_out.close()
+
+            stats_out = open(self.output_dir + os.sep + chrm + '.interval_read_count.dat', 'w')
+            stats_out.write('Chrm,Int_start,Int_end,Size')
+            for sample in sample_list:
+                stats_out.write(',' +sample)
+            stats_out.write(os.linesep)
 
             for interval in chrm_interval_list:
-
+                stats_out.write(
+                    "%s,%s,%s,%s" % (chrm, interval.interval_start, interval.interval_end,
+                                  interval.interval_end-interval.interval_start))
                 for sample in sample_list:
-
-                    samfp = self.depth_data.bam_files.sam_file_dict[sample]
-
-                    self.get_interval_read_stats(samfp, interval, sample)
-
-            if write_stats:
-
-                for sample in sample_list:
-                    stats_out = open('/home/dtgillis/sim_capture/data/' + sample + '.interval_stats.dat', 'w')
-                    stats_out.write('Int_size,reads,avg_insert,unpaired_percent,gc_content' + os.linesep)
-                    for interval in chrm_interval_list:
-                        stats = interval.stats[sample]
-                        stats_out.write(str(interval.interval_end-interval.interval_start))
-                        for stat in ['total_reads', 'avg_insert_size', 'unpaired_percent', 'gc_content']:
-                            stats_out.write(",%s" % stats[stat])
-                        stats_out.write(os.linesep)
-                    stats_out.close()
-
-                stats_out = open('/home/dtgillis/sim_capture/data/interval_read_count.dat', 'w')
-                stats_out.write('Size')
-                for sample in sample_list:
-                    stats_out.write(',' +sample)
+                    stats_out.write(",%s" % interval.stats[sample]['total_reads'])
                 stats_out.write(os.linesep)
-
-                for interval in chrm_interval_list:
-                    stats_out.write("%s" % (interval.interval_end-interval.interval_start))
-                    for sample in sample_list:
-                        stats_out.write(",%s" % interval.stats[sample]['total_reads'])
-                    stats_out.write(os.linesep)
-
-
-
-
-
 
     def get_interval_read_stats(self, bam_file, interval, sample_name):
         # set up stats dictionary
@@ -173,6 +177,9 @@ class SamToolsDepthParser():
                     interval, interval.windows_size)
             interval_num += 1
 
+        sys.stdout.write("\nFinished creating windows    \n\n")
+        sys.stdout.write("-----------------------------------\n")
+
     def get_windows_in_interval_for_sample_list(self, interval, window_size):
 
         total_windows = (interval.interval_end - interval.interval_start) / window_size
@@ -236,12 +243,11 @@ class SamToolsDepthParser():
             window_start += window_size
 
     def pickle_intervals_for_chrm(self):
-
-        for chrm in self.depth_data.interval_list.interval_dictionary:
-
-            chrm_intervals = self.depth_data.interval_list.interval_dictionary[chrm]
-
-            pickle.dump(chrm_intervals, open('/home/dtgillis/sim_capture/pickles/' + chrm + '.interval_depth.p', 'wb'))
+        pass
+        # for chrm in self.depth_data.interval_list.interval_dictionary:
+        #
+        #     chrm_intervals = self.depth_data.interval_list.interval_dictionary[chrm]
+        #     pickle.dump(chrm_intervals, open('' + chrm + '.interval_depth.p', 'wb'))
 
     def clear_interval_information_for_chrm(self, chrm):
 
