@@ -4,8 +4,9 @@ import sys
 import getopt
 from cnvpy.depth_coverage.depth_parsers import SamToolsDepthParser
 import cnvpy.depth_coverage.math_utils as doc_math
+import cnvpy.depth_coverage.io_utils as io_utils
 import os
-import numpy as np
+
 
 def print_help():
     print """ here comes some help"""
@@ -21,7 +22,7 @@ def depth_using_sam_tools():
     argv = sys.argv[1:]
     try:
         opts, args = getopt.getopt(
-            argv, "hi:b:o:w:", ["interval_list=", "bam_file_list=", "out_dir=", "window_size=", "write_interval_stats="])
+            argv, "hi:b:o:w:", ["interval_list=", "bam_file_list=", "out_dir=", "window_size="])
     except getopt.GetoptError:
         print 'cnv_caller.py -b <bamfilelist> -i <interval_list> -o <outputdir>'
         sys.exit(2)
@@ -49,13 +50,13 @@ def depth_using_sam_tools():
     assert bam_file_list is not None, "Specify bam file list -b <bam_file_list>"
     assert window_size is not None, "Specify a starting window size -w <window_size>"
 
-    if not os.path.exists(out_dir):
+    main_out_file_prefix = out_dir
+    if not os.path.exists(main_out_file_prefix):
         try:
-            os.makedirs(out_dir)
+            os.makedirs(main_out_file_prefix)
         except OSError:
-            print "error making path {0}".format(out_dir)
-
-    main_out_file_prefix = out_dir + os.sep + 'cnv_calls.'
+            print "unable to make output dir " + main_out_file_prefix
+            sys.exit(1)
 
     depth_parser = SamToolsDepthParser(bam_file_list, interval_list, out_dir, window_size)
 
@@ -64,19 +65,7 @@ def depth_using_sam_tools():
         sys.stdout.write("Starting cnv_caller for " + chrm + os.linesep)
         depth_parser.get_interval_stats_by_sample(chrm, write_stats=(write_interval_stats == '1'))
         depth_parser.get_windows_in_intervals_by_chrm(chrm)
-        sample_prob = doc_math.calculate_poisson_window_prob_for_chrm(
-            depth_parser.depth_data.interval_list.interval_dictionary[chrm])
-        out_file_pointer = open(main_out_file_prefix + chrm + '.' + str(window_size) + '.chrm.out', 'w')
-        #header stuff
-        sys.stdout.write("Writing cnv calls for " + chrm + " to file " + out_file_pointer.name + os.linesep)
-        out_file_pointer.write('sample_name,chrm,start,end,state' + os.linesep)
-        for sample in sample_prob:
-            for cnv_call in sample_prob[sample]:
-                out_file_pointer.write(
-                    "%s,%s,%s,%s,%s\n" % (sample, chrm, cnv_call.window_start,
-                                          cnv_call.window_end, cnv_call.cnv_state[0]))
-        out_file_pointer.close()
-
+        io_utils.write_out_window_stats_by_chrm(depth_parser, chrm, main_out_file_prefix)
         depth_parser.clear_interval_information_for_chrm(chrm)
 
 if __name__ == '__main__':

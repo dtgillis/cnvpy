@@ -3,6 +3,7 @@ import os
 import pickle
 import sys
 import math
+import numpy as np
 
 import pysam
 
@@ -60,7 +61,8 @@ class SamToolsDepthParser():
                     interval.stats[sample] = dict()
 
     def get_interval_stats_by_sample(self, chrm, write_stats=False):
-
+        #TODO insert size needs to remove outliers that are "properly" paired
+        #picard and gatk both use median
         sample_list = self.depth_data.bam_files.sam_file_dict.keys()
 
         chrm_interval_list = self.depth_data.interval_list.interval_dictionary[chrm]
@@ -238,6 +240,8 @@ class SamToolsDepthParser():
                         tmp_cur_base += 1
 
                 tmp_window.window_depth_by_sample[sample] = tmp_depth_list
+                tmp_window.window_mean[sample] = np.mean(np.array(tmp_depth_list)[:, 1])
+                tmp_window.window_var[sample] = np.var(np.array(tmp_depth_list)[:, 1])
 
             interval.windows.append(tmp_window)
             window_start += window_size

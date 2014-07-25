@@ -177,4 +177,15 @@ def calculate_poisson_window_prob_for_chrm(chrm_interval_list):
     out_probs = simple_bays_calc(sample_prob_matrices, chrm_interval_list)
 
     return simple_cnv_call(out_probs)
+
+
+def calculate_neg_binomial_window_prob_for_chrm(chrm_interval_list):
+
+    average_depth_by_sample= get_chrm_depth_avg_by_sample(chrm_interval_list)
+    chrm_means = []
+    for sample in average_depth_by_sample.keys():
+        #average
+        print sample
+
+
     #return make_cnv_monte_carlo_call(out_probs)

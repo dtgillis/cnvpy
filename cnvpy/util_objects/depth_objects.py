@@ -1,6 +1,7 @@
 __author__ = 'dtgillis'
 import numpy as np
 
+
 class Window():
 
     def __init__(self):
@@ -11,6 +12,8 @@ class Window():
         self.window_depth_by_sample = dict()
         self.window_bp = None
         self.stats = dict()
+        self.window_var = dict()
+        self.window_mean = dict()
 
 
 class Interval():
