@@ -1,6 +1,10 @@
+from __future__ import division
+
 __author__ = 'dtgillis'
 import bisect
 import os
+from cnvpy.samtools_utils.io import SamFileDictionary
+import numpy as np
 
 
 class Window():
@@ -17,23 +21,31 @@ class Window():
 
 class Interval():
 
-    def __init__(self, chrm, interval_start, interval_end):
+    def __init__(self, chrm, interval_start, interval_end, num_samples):
 
         self.chrm = chrm
         self.interval_start = interval_start
         self.interval_end = interval_end
-        self.read_count = []
-        self.depth_of_coverage = []
+        self.read_count = np.zeros(num_samples)
+        self.depth_of_coverage = np.zeros([num_samples, interval_end - interval_start + 1])
 
     def __lt__(self, other):
         return self.interval_start < other.interval_start
 
+    def get_interval_length(self):
+        return self.interval_end - self.interval_start + 1
+
+    def get_interval_avg(self):
+        return self.depth_of_coverage.mean(axis=1)
+
 
 class IntervalList():
 
-    def __init__(self, interval_file):
+    def __init__(self, interval_file, number_of_samples):
         self.interval_list = []
         self.interval_file = interval_file
+        self.num_samples = number_of_samples
+        self.overall_average = None
 
     def build_interval_list(self):
 
@@ -44,7 +56,7 @@ class IntervalList():
                 chrm = line.split(':')[0]
                 interval_start = int(line.split(':')[1].split('-')[0])
                 interval_end = int(line.split(':')[1].split('-')[1])
-                interval = Interval(chrm, interval_start, interval_end)
+                interval = Interval(chrm, interval_start, interval_end, self.num_samples)
                 # add interval to list
                 self.interval_list.append(interval)
         # sort the list as a sanity check
@@ -99,6 +111,11 @@ class IntervalList():
     def number_of_intervals(self):
         return len(self.interval_list)
 
+    def calculate_overall_avg(self):
+        avg = np.zeros(self.num_samples)
+        for interval in self.interval_list:
+            avg += interval.get_interval_avg()
+        self.overall_average = avg/self.number_of_intervals()
 
 class CNVCall():
     """
@@ -112,14 +129,18 @@ class CNVCall():
         self.sample = sample
 
 
-from cnvpy.samtools_utils.io import SamFileDictionary
-
-
 class DepthData():
+    """
+    Main class Depth Data holds all information about the samples and
+    intervals.
+
+    contains IntervalList object and SamFileDictionary object.
+
+    """
     def __init__(self, bam_file_list, interval_list, binary=True):
 
         self.bam_files = SamFileDictionary(bam_file_list, binary=binary, open_files=True)
-        self.intervals = IntervalList(interval_list)
+        self.intervals = IntervalList(interval_list, len(self.bam_files.sample_list))
         self.intervals.build_interval_list()
 
 
