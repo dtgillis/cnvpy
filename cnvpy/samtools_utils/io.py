@@ -1,6 +1,6 @@
 __author__ = 'dtgillis'
 
-import pysam as psam
+import pysam
 import os
 
 
@@ -11,6 +11,7 @@ class SamFileDictionary():
         self.bam_files_list = bam_files
         self.binary = binary
         self.sam_file_dict = dict()
+        self.sample_list = []
 
         for bam_file in open(self.bam_files_list, 'r'):
 
@@ -27,7 +28,8 @@ class SamFileDictionary():
             if sample_name in self.sam_file_dict:
                 print "duplicate sample error"
             else:
-                self.sam_file_dict[sample_name] = psam.Samfile(bam_file, open_op)
+                self.sam_file_dict[sample_name] = pysam.Samfile(bam_file, open_op)
+                self.sample_list.append(sample_name)
 
     def close_bam_file(self, sample_name):
 
