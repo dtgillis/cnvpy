@@ -5,6 +5,8 @@ import bisect
 import os
 from cnvpy.samtools_utils.io import SamFileDictionary
 import numpy as np
+import rpy2.robjects as robjects
+from rpy2.robjects.packages import importr
 
 
 class Window():
@@ -142,6 +144,33 @@ class DepthData():
         self.bam_files = SamFileDictionary(bam_file_list, binary=binary, open_files=True)
         self.intervals = IntervalList(interval_list, len(self.bam_files.sample_list))
         self.intervals.build_interval_list()
+
+    def window_calculations(self, mode='poisson'):
+
+        # Calculate probs with target region as windows
+        chrm_means = self.intervals.overall_average
+        probs = []
+        compoisson = importr('COMPoissonReg')
+        if len(self.pass_one) == 0:
+            for interval in self.intervals.interval_list:
+
+                window_means = interval.depth_of_coverage.mean(axis=1)
+                target_constant = window_means.sum() / chrm_means.sum()
+                efficiency = np.floor(target_constant * chrm_means)
+                v = robjects.FloatVector(interval.depth_of_coverage.mean(axis=1))
+                d = {'X': v,
+                    'Y': robjects.IntVector(efficiency)}
+                df = robjects.DataFrame(d)
+                fit = compoisson.cmp('Y~X', data=df)
+                print fit
+
+                out_probs = np.zeros_like(efficiency)
+                for i in range(self.intervals.num_samples):
+                    out_probs[i] = 1 - poisson.pmf(int(efficiency[i]), window_means[i])
+                probs.append(np.nan_to_num(out_probs))
+
+            self.pass_one = np.array(probs)
+
 
 
 
