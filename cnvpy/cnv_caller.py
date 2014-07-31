@@ -59,28 +59,26 @@ def depth_using_sam_tools():
 
     depth_parser = SamToolsDepthParser(bam_file_list, interval_list, out_dir, window_size)
 
-    for chrm in depth_parser.depth_data.interval_list.interval_dictionary:
+    sys.stdout.write("Starting cnv_caller for {0:d} samples".format(len(depth_parser.depth_data.bam_files.sample_list)))
 
-        sys.stdout.write("Starting cnv_caller for " + chrm + os.linesep)
-        depth_parser.get_interval_stats_by_sample(chrm, write_stats=(write_interval_stats == '1'))
-        depth_parser.get_windows_in_intervals_by_chrm(chrm)
-        sample_prob = doc_math.calculate_poisson_window_prob_for_chrm(
-            depth_parser.depth_data.interval_list.interval_dictionary[chrm])
-        out_file_pointer = open(main_out_file_prefix + chrm + '.' + str(window_size) + '.chrm.out', 'w')
-        #header stuff
-        sys.stdout.write("Writing cnv calls for " + chrm + " to file " + out_file_pointer.name + os.linesep)
-        out_file_pointer.write('sample_name,chrm,start,end,state' + os.linesep)
-        for sample in sample_prob:
-            for cnv_call in sample_prob[sample]:
-                out_file_pointer.write(
-                    "%s,%s,%s,%s,%s\n" % (sample, chrm, cnv_call.window_start,
-                                          cnv_call.window_end, cnv_call.cnv_state[0]))
-        out_file_pointer.close()
+    depth_parser.parse_bam_files()
 
-        depth_parser.clear_interval_information_for_chrm(chrm)
+    depth_parser.depth_data.window_calculations()
+    sample_prob = doc_math.calculate_poisson_window_prob_for_chrm(
+        depth_parser.depth_data.interval_list.interval_dictionary[chrm])
+    out_file_pointer = open(main_out_file_prefix + chrm + '.' + str(window_size) + '.chrm.out', 'w')
+    #header stuff
+    sys.stdout.write("Writing cnv calls for " + chrm + " to file " + out_file_pointer.name + os.linesep)
+    out_file_pointer.write('sample_name,chrm,start,end,state' + os.linesep)
+    for sample in sample_prob:
+        for cnv_call in sample_prob[sample]:
+            out_file_pointer.write(
+                "%s,%s,%s,%s,%s\n" % (sample, chrm, cnv_call.window_start,
+                                      cnv_call.window_end, cnv_call.cnv_state[0]))
+    out_file_pointer.close()
+
+#   depth_parser.clear_interval_information_for_chrm(chrm)
 
 if __name__ == '__main__':
 
     depth_using_sam_tools()
-
-
