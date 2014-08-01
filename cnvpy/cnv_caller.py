@@ -63,18 +63,23 @@ def depth_using_sam_tools():
 
     depth_parser.parse_bam_files()
 
+    depth_parser.depth_data.target_calculations()
+
     depth_parser.depth_data.window_calculations()
-    sample_prob = doc_math.calculate_poisson_window_prob_for_chrm(
-        depth_parser.depth_data.interval_list.interval_dictionary[chrm])
-    out_file_pointer = open(main_out_file_prefix + chrm + '.' + str(window_size) + '.chrm.out', 'w')
+
+    out_file_pointer = open(main_out_file_prefix + 'chrm1.chrm.out', 'w')
     #header stuff
+    chrm = depth_parser.depth_data.intervals.interval_list[0].chrm
     sys.stdout.write("Writing cnv calls for " + chrm + " to file " + out_file_pointer.name + os.linesep)
-    out_file_pointer.write('sample_name,chrm,start,end,state' + os.linesep)
-    for sample in sample_prob:
-        for cnv_call in sample_prob[sample]:
+    out_file_pointer.write('sample_name,chrm,num_exons,start,end,state,location' + os.linesep)
+    sample_list = depth_parser.depth_data.bam_files.sample_list
+    for cnv_call in depth_parser.depth_data.cnv_calls:
+        if cnv_call.cnv_state != 2:
             out_file_pointer.write(
-                "%s,%s,%s,%s,%s\n" % (sample, chrm, cnv_call.window_start,
-                                      cnv_call.window_end, cnv_call.cnv_state[0]))
+                "{0:s},{1:s},{5:d},{2:d},{3:d},{4:d},{1:s}:{2:d}-{3:d}\n".format(
+                sample_list[cnv_call.sample], chrm,  int(cnv_call.window_start),
+                int(cnv_call.window_end), int(cnv_call.cnv_state), cnv_call.num_regions))
+
     out_file_pointer.close()
 
 #   depth_parser.clear_interval_information_for_chrm(chrm)
