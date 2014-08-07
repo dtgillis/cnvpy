@@ -2,8 +2,10 @@
 setup.py
 cnvpy/__init__.py
 cnvpy/cnv_caller.py
+cnvpy/window_stats_collector.py
 cnvpy/depth_coverage/__init__.py
 cnvpy/depth_coverage/depth_parsers.py
+cnvpy/depth_coverage/io_utils.py
 cnvpy/depth_coverage/math_utils.py
 cnvpy/depth_coverage/window_builder.py
 cnvpy/samtools_utils/__init__.py

@@ -11,6 +11,6 @@ setup(name='cnvpy',
       py_modules=['cnvpy.cnv_caller'],
       packages=['cnvpy', 'cnvpy.depth_coverage',
                 'cnvpy.samtools_utils', 'cnvpy.util_objects'],
-      requires=['numpy', 'scipy', 'pysam'])
+      requires=['numpy', 'scipy', 'pysam', 'pybedtools'])
 
 

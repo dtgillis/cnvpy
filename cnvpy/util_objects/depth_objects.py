@@ -6,7 +6,9 @@ import os
 from cnvpy.samtools_utils.io import SamFileDictionary
 import numpy as np
 from scipy.stats import poisson
-import matplotlib.pyplot as plt
+from operator import attrgetter
+from copy import deepcopy
+import pybedtools
 
 
 class Window():
@@ -20,6 +22,7 @@ class Window():
         self.sample_num = sample_num
         self.window_done = False
         self.cn_state = cn_state
+        self.interval_range_list = [(window_start, window_end)]
 
     def window_length(self):
         return self.window_end - self.window_start
@@ -33,9 +36,33 @@ class Window():
             self.window_end = interval.interval_end
             self.window_depth_data = np.hstack((self.window_depth_data, interval.depth_of_coverage))
         self.num_target_regions += 1
+        self.interval_range_list.append([interval.interval_start, interval.interval_end])
+        #sort by first element in list
+        self.interval_range_list = sorted(self.interval_range_list, key=lambda bp_range: bp_range[0])
+
+    def remove_last_call(self, right=True):
+        """
+        We added windows till we no longer had a something other than 2 copies
+        So remove the data for the end we are adding to
+        :param right:
+        :return:
+        """
+
+        if right:
+            # remove from the -1 end
+            remove_range = self.interval_range_list.pop(-1)
+            remove_length = remove_range[1] - remove_range[0] + 1
+            # trim depth data we don't need
+            self.window_depth_data = self.window_depth_data[:, 0:-remove_length]
+            # fix the end point
+            tmp_range = self.interval_range_list[-1]
+            self.window_end = tmp_range[1]
+            self.num_target_regions -= 1
+
 
     def make_final_cnv_call(self, chrm_means):
 
+        self.remove_last_call()
         sample_data = self.window_depth_data[self.sample_num]
         probs = np.zeros_like(chrm_means)
         window_means = self.window_depth_data.mean(axis=1)
@@ -47,7 +74,7 @@ class Window():
 
         if probs.sum() != 0:
             overall_probs = probs / probs.sum()
-            cnv_call = np.nonzero(probs.max() == probs)[0][0]
+            cnv_call = np.nonzero(overall_probs.max() == overall_probs)[0][0]
         else:
             cnv_call = 2
 
@@ -84,6 +111,7 @@ class IntervalList():
         self.interval_file = interval_file
         self.num_samples = number_of_samples
         self.overall_average = None
+        self.bed_file = None
 
     def build_interval_list(self):
 
@@ -155,6 +183,23 @@ class IntervalList():
             avg += interval.get_interval_avg()
         self.overall_average = avg/self.number_of_intervals()
 
+    def create_bed_file_of_intervals(self):
+
+        bed_string = ''
+        for interval in self.interval_list:
+
+            bed_string += '{0:s}\t{1:d}\t{2:d}\n'.format(
+                interval.chrm, interval.interval_start, interval.interval_end)
+
+        self.bed_file = pybedtools.BedTool(bed_string, from_string=True)
+
+    def get_bed_file(self):
+
+        if self.bed_file is None:
+            self.create_bed_file_of_intervals()
+        else:
+            return self.bed_file
+
 
 class CNVCall():
     """
@@ -185,8 +230,9 @@ class DepthData():
         self.pass_one = []
         self.window_regions = []
         self.cnv_calls = []
+        self.cnv_dict = dict()
 
-    def target_calculations(self, mode='poisson', plotqq=False):
+    def target_calculations(self, model='poisson'):
 
         # Calculate probs with target region as windows
         chrm_means = self.intervals.overall_average
@@ -219,17 +265,8 @@ class DepthData():
                 probs.append(np.nan_to_num(out_probs))
 
             self.pass_one = np.array(probs)
-            if plotqq:
-                for i in range(self.pass_one.shape[1]):
 
-                    y = -np.log(self.pass_one[:, i])
-                    y = np.sort(y)
-                    x = np.sort(-np.log(np.linspace(0, 1, self.pass_one.shape[0])))
-                    plt.plot(x, y, '.')
-                    plt.plot(x, x, '-')
-                    plt.show()
-
-    def window_calculations(self):
+    def window_calculations(self, right=True):
 
         windows_done = 0
         chrm_means = self.intervals.overall_average
@@ -266,3 +303,40 @@ class DepthData():
                         window.window_done = True
                         windows_done += 1
                         self.cnv_calls.append(window.make_final_cnv_call(chrm_means))
+
+    def sort_cnv_calls(self):
+
+        cnv_calls = deepcopy(self.cnv_calls)
+        cnv_sorted = sorted(cnv_calls, key=attrgetter('sample', 'window_start'))
+        cnv_dict = dict()
+        for cnv_call in cnv_sorted:
+            if cnv_call.sample not in cnv_dict:
+                cnv_dict[cnv_call.sample] = []
+            cnv_dict[cnv_call.sample].append(cnv_call)
+
+        self.cnv_dict = cnv_dict
+
+    def merge_cnv_calls(self, chrm):
+
+        self.intervals.create_bed_file_of_intervals()
+
+        for sample in self.cnv_dict.keys():
+
+            cnv_calls = self.cnv_dict[sample]
+
+            # create a bed file from the intervals and cnv number as score
+            bed_string = ''
+            for cnv_call in cnv_calls:
+                bed_string += '{0:s}\t{1:d}\t{2:d}\t{3:s}\t{4:d}\n'.format(
+                    chrm, cnv_call.window_start, cnv_call.window_end, "name", cnv_call.cnv_state)
+
+            cnv_call_bed_file = pybedtools.BedTool(bed_string, from_string=True)
+            merged_cnv_calls = cnv_call_bed_file.merge(c=5, o='mean')
+            #now intersect to get the correct number of target regions in the call
+            interval_counts = merged_cnv_calls.intersect(self.intervals.bed_file, c=True)
+            merged_cnv_calls_list = []
+            for line in interval_counts:
+                merged_cnv_calls_list.append(CNVCall(
+                    int(line[1]), int(line[2]), int(round(float(line[3]))), sample, int(line[4])))
+
+            self.cnv_dict[sample] = merged_cnv_calls_list
