@@ -235,27 +235,35 @@ class DepthData():
     def target_calculations(self, model='poisson'):
 
         # Calculate probs with target region as windows
+        threshold = .05
         chrm_means = self.intervals.overall_average
         probs = []
         nb_probs = []
-           # mass = importr('MASS')
         if len(self.pass_one) == 0:
             for interval in self.intervals.interval_list:
                 window_means = interval.depth_of_coverage.mean(axis=1)
                 target_constant = window_means.sum() / chrm_means.sum()
                 efficiency = np.floor(target_constant * chrm_means)
+                cn_states = np.array([0, .5, 1, 1.5, 2.0, 2.5, 3])
                 out_probs = np.zeros_like(efficiency)
+
                 for i in range(self.intervals.num_samples):
-                    #this prob / highest prob
+                    # use p(c|y) = f(y|c)p(c) /p(y)
+                    # p(c) is not used at this point. A prior would be better for statisics.
+                    # with p(c) p(y) changes to sum p(y|c)p(c) over c which is cn_states
+                    # or use some other kind of prior ie gamma ?
+                    # right now we are assuming all states are equal which is incorrect
+                    # let f(y|c) be the mle which is the average of y
+
                     if window_means[i] != 0:
-                        out_probs[i] = \
-                            poisson.pmf(int(efficiency[i]), window_means[i]) /\
-                            poisson.pmf(int(window_means[i]), window_means[i])
+                        num = poisson.pmf((efficiency[i]*cn_states).astype(int), window_means[i])
+                        den = np.sum(poisson.pmf((window_means[i]*cn_states).astype(int), window_means[i]))
+                        out_probs[i] = (num / den)[2]
                     else:
-                        #TODO account for this with zero inflated model?
+                        #TODO correction should possibly be on number of exons? It is on the number of samples right now.
                         out_probs[i] = 0.0
-                    if out_probs[i] < .05/22 and window_means.mean() > 8.0:
-                        cn_state = window_means[i]/efficiency[i] * 2.0
+                    if out_probs[i] < threshold/self.intervals.num_samples and window_means.mean() > 8.0:
+                        cn_state = int(round(window_means[i]/efficiency[i] * 2.0))
                         self.window_regions.append(
                             Window(interval.interval_start,
                                    interval.interval_end,
@@ -288,18 +296,21 @@ class DepthData():
                 if not window.window_done:
                     window_means = window.window_depth_data.mean(axis=1)
                     target_constant = window_means.sum() / chrm_means.sum()
-                    efficiency = np.floor(window.cn_state * .5 * target_constant * chrm_means)
-                    out_probs = np.zeros_like(efficiency)
+                    efficiency = np.floor(target_constant * chrm_means)
+                    out_prob = .0
                     sample = window.sample_num
-                    #this prob / highest prob
+                    cn_states = np.array([0, .5, 1, 1.5, 2.0, 2.5, 3.0])
+                    #same calculation as above with more data need a prior?
                     if window_means[sample] != 0:
-                        out_probs[sample] = \
-                            poisson.pmf(int(efficiency[sample]), window_means[sample]) /\
-                            poisson.pmf(int(window_means[sample]), window_means[sample])
+                        # point probability of this sample having this given cnstate still
+                        num = poisson.pmf((.5 * efficiency[sample]*window.cn_state).astype(int), window_means[sample])
+                        den = sum(poisson.pmf((efficiency[sample]*cn_states).astype(int), window_means[sample]))
+                        out_prob = num/den
+
                     else:
                         #TODO account for this with zero inflated model?
-                        out_probs[sample] = 0.0
-                    if out_probs[sample] < .95:
+                        out_prob = 0.0
+                    if out_prob < .95:
                         window.window_done = True
                         windows_done += 1
                         self.cnv_calls.append(window.make_final_cnv_call(chrm_means))
