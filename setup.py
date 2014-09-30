@@ -3,7 +3,7 @@ __author__ = 'dtgillis'
 from distutils.core import setup
 
 setup(name='cnvpy',
-      version='1.0-dev',
+      version='1.0-master',
       description='Copy Number Variant Python',
       author='Daniel Gillis',
       author_email='dtgillis@renci.org',
